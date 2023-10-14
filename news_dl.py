@@ -5,6 +5,19 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 from dateutil.parser import parse
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    encoding='utf-8',
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler("app.log"),
+        logging.StreamHandler()
+    ]
+)
+
+logging.debug("Starting application")
 
 # Function to initialize the SQLite database and create tables
 def initialize_database(database_name):
@@ -63,7 +76,7 @@ def process_rss_feeds(json_file, database_name):
         feed_urls = json.load(file)
     
     for feed_url in feed_urls:
-        print(f"Scanning news from {feed_url}")
+        logging.info(f"Scanning news from {feed_url}")
         feed = feedparser.parse(feed_url)
         
         # Check if the feed URL is already in the database
@@ -72,7 +85,7 @@ def process_rss_feeds(json_file, database_name):
         
         if existing_entry:
             rss_feed_id = existing_entry[0][0]
-            print(f"RSS Feed ID: {rss_feed_id}")
+            logging.info(f"RSS Feed ID: {rss_feed_id}")
         
         # Add RSS feed URL into the database
         else:
@@ -87,41 +100,41 @@ def process_rss_feeds(json_file, database_name):
         
             if existing_entry:
                 rss_feed_id = existing_entry[0][0]
-                print(f"RSS Feed ID: {rss_feed_id}")
+                logging.info(f"RSS Feed ID: {rss_feed_id}")
             
             # Add RSS feed URL into the database
             else:
-                print("Error adding RSS feed in table rss_feeds")
+                logging.error("Error adding RSS feed in table rss_feeds")
         
         for entry in feed.entries:
             guid = entry.get('guid', '')
             link = entry.link.lower()
             
-            print("Reading news %s" % (entry.get('description', '')))
+            logging.info("Reading news %s" % (entry.get('description', '')))
             # Check if the entry is already in the database
             cursor.execute('SELECT 1 FROM news WHERE link = ?', (link,))
             existing_entry = cursor.fetchone()
             
             if not existing_entry:
-                print(f"RSS Feed : {feed_url}")
-                print(f"Adding link {link} to the database")
+                logging.info(f"RSS Feed : {feed_url}")
+                logging.info(f"Adding link {link} to the database")
                 # Entry is not in the database; fetch web page content
                 try:
                     title = entry.title
                 except:
-                    print("Cannot read title")
+                    logging.info("Cannot read title")
                 try:
                     description = entry.get('description', '')
                 except:
-                    print("Cannot read description")
+                    logging.info("Cannot read description")
                 try:
                     pubdate_text = entry.get('published', '')
                 except:
-                    print("Cannot read published")
+                    logging.info("Cannot read published")
                 try:
                     pubdate_datetime = parse(pubdate_text)
                 except:
-                    print("Cannot parse pubdate")
+                    logging.info("Cannot parse pubdate")
                 
                 
                 
@@ -140,7 +153,7 @@ def process_rss_feeds(json_file, database_name):
                     VALUES (?, ?)
                 ''', (link, convert_html_to_text(web_page_content)))
             else:
-                print(f"Link already in DB : {link}")
+                logging.info(f"Link already in DB : {link}")
     
     conn.commit()
     conn.close()
@@ -151,7 +164,7 @@ def fetch_web_page_content(url):
     #    input(f"abcnews URL : {url}")
     response = requests.get(url)
     if response.status_code == 200:
-        #print(response.text)
+        #logging.info(response.text)
         return response.text
     else:
         #input(f"Cannot fetch URL content from : {url}")
@@ -173,7 +186,7 @@ def convert_html_to_text(html_content):
         pass
         
     if html_text == "" or html_text is None:
-        print("ERROR: CANNOT PROCESS HTML")
+        logging.error("ERROR: CANNOT PROCESS HTML")
 
     return html_text
 
