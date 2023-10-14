@@ -7,13 +7,20 @@ from datetime import datetime
 from dateutil.parser import parse
 import logging
 
-logging.basicConfig(filename='app.log', encoding='utf-8', level=logging.DEBUG)
+logging.basicConfig(
+    level=logging.INFO,
+    encoding='utf-8',
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler("app.log"),
+        logging.StreamHandler()
+    ]
+)
 
 logging.debug("Starting application")
 
 # Function to initialize the SQLite database and create tables
 def initialize_database(database_name):
-    global logging
     conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     
@@ -54,7 +61,6 @@ def initialize_database(database_name):
 
 # Function to parse RSS feed date and convert it to datetime
 def parse_pubdate(pubdate_text):
-    global logging
     try:
         pubdate = datetime.strptime(pubdate_text, '%a, %d %b %Y %H:%M:%S %z')
         return pubdate
@@ -63,7 +69,6 @@ def parse_pubdate(pubdate_text):
         
 # Function to fetch and process RSS feeds
 def process_rss_feeds(json_file, database_name):
-    global logging
     conn, cursor = initialize_database(database_name)
     rss_feed_id = None
     
@@ -155,7 +160,6 @@ def process_rss_feeds(json_file, database_name):
 
 # Function to fetch web page content
 def fetch_web_page_content(url):
-    global logging
     #if "abcnews" in url:
     #    input(f"abcnews URL : {url}")
     response = requests.get(url)
@@ -168,7 +172,6 @@ def fetch_web_page_content(url):
 
 # Function to convert HTML to plain text using BeautifulSoup
 def convert_html_to_text(html_content):
-    global logging
     html_text = ""
     try:
         soup = BeautifulSoup(html_content, 'html.parser')
@@ -188,7 +191,6 @@ def convert_html_to_text(html_content):
     return html_text
 
 if __name__ == '__main__':
-    global logging
     json_file = 'rss_feeds.json'
     database_name = 'rss_app.db'
     process_rss_feeds(json_file, database_name)
