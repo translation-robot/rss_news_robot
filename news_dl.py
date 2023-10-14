@@ -7,6 +7,7 @@ from datetime import datetime
 from dateutil.parser import parse
 import logging
 
+
 logging.basicConfig(
     level=logging.INFO,
     encoding='utf-8',
