@@ -215,12 +215,16 @@ def fetch_web_page_content(url):
             chrome_options.add_argument("--lang=en-GB")
             chrome_options.add_argument('--blink-settings=imagesEnabled=false')
             chrome_options.add_argument('--disable-browser-side-navigation')
+            chrome_options.add_argument("--webdriver-logfile=webdrive.log")
             # or alternatively we can set direct preference:
             chrome_options.add_experimental_option(
                 "prefs", {"profile.managed_default_content_settings.images": 2}
             )
             
-            service = Service()
+            service = Service(
+                service_args=["--log-level=ALL", "--append-log"],
+                log_path="LOGCHROME.txt",
+                loggingPrefs={'browser': 'ALL'})
             driver = webdriver.Chrome(service=service, options=chrome_options)
             driver.set_page_load_timeout(5)
             
