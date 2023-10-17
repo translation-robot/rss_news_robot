@@ -70,9 +70,10 @@ def initialize_database(database_name):
     
     # Create the text content table
     cursor.execute('''
-    CREATE TABLE IF NOT EXISTS text_content (
+    CREATE TABLE IF NOT EXISTS page_content (
         id INTEGER PRIMARY KEY,
         url TEXT,
+        title TEXT,
         content TEXT
     )
     ''')
@@ -164,12 +165,15 @@ def process_rss_feeds(json_file, database_name):
                 
                 # Fetch web page content
                 web_page_content = fetch_web_page_content(link)
-                web_page_content = convert_html_to_text(web_page_content)
-                web_page_content = re.sub(r' +', ' ', web_page_content)
-                web_page_content = re.sub(r'\r', '', web_page_content)
-                web_page_content = re.sub(r' +\n', '\n', web_page_content)
-                web_page_content = re.sub(r'\n+', '\n', web_page_content)
-                web_page_content = re.sub(r'[\r\n]+', '\n', web_page_content)
+                title = ""
+                logging.info("Converting HTML to text")
+                title, page_text = convert_html_to_text(web_page_content)
+                logging.info("Conversion done")
+                page_text = re.sub(r' +', ' ', page_text)
+                page_text = re.sub(r'\r', '', page_text)
+                page_text = re.sub(r' +\n', '\n', page_text)
+                page_text = re.sub(r'\n+', '\n', page_text)
+                page_text = re.sub(r'[\r\n]+', '\n', page_text)
                 
                 # Insert RSS feed information into the database
                 cursor.execute('''
@@ -177,14 +181,11 @@ def process_rss_feeds(json_file, database_name):
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 ''', (title, description, link, guid, pubdate_text, pubdate_datetime, rss_feed_id))
                 
-                logging.info("Converting HTML to text")
-                page_text = convert_html_to_text(web_page_content)
-                logging.info("Conversion done")
-                # Insert text content into the text_content table
+                # Insert text content into the page_content table
                 cursor.execute('''
-                    INSERT INTO text_content (url, content)
-                    VALUES (?, ?)
-                ''', (link, page_text))
+                    INSERT INTO page_content (url, title, content)
+                    VALUES (?, ?, ?)
+                ''', (link, title, page_text))
                 conn.commit()
             else:
                 logging.info(f"Link already in DB : {link}")
@@ -248,6 +249,7 @@ def fetch_web_page_content(url):
 # Function to convert HTML to plain text using BeautifulSoup
 def convert_html_to_text(html_content):
     html_text = ""
+    title = ""
     
     #try:
     #    html_text = h2t.handle(html_content)
@@ -258,19 +260,22 @@ def convert_html_to_text(html_content):
     try:
         soup = BeautifulSoup(html_content, 'html.parser')
         html_text = soup.get_text()
+        title = soup.title.string
     except:
         pass
         
     try:
         if html_text == "" or html_text is None:
             html_text = html2text.html2text(html_content)
+        if title == "" or title is None:
+            driver.title
     except:
         pass
         
     if html_text == "" or html_text is None:
         logging.error("ERROR: CANNOT PROCESS HTML")
 
-    return html_text
+    return title, html_text
 
 if __name__ == '__main__':
     logging.debug("Starting application")
