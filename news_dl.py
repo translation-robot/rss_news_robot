@@ -6,6 +6,29 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 from dateutil.parser import parse
 import logging
+import re
+import traceback
+from selenium.webdriver.support.ui import WebDriverWait
+
+
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.remote.remote_connection import LOGGER
+from selenium import webdriver
+
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
+import html2text
+
+h2t = html2text.HTML2Text()
+
+# Set selenium driver to None
+driver = None
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,8 +39,6 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
-
-logging.debug("Starting application")
 
 # Function to initialize the SQLite database and create tables
 def initialize_database(database_name):
@@ -120,26 +141,35 @@ def process_rss_feeds(json_file, database_name):
                 logging.info(f"Adding link {link} to the database")
                 # Entry is not in the database; fetch web page content
                 try:
+                    title = None
                     title = entry.title
                 except:
                     logging.info("Cannot read title")
                 try:
+                    description = None
                     description = entry.get('description', '')
                 except:
                     logging.info("Cannot read description")
                 try:
+                    pubdate_text = None
                     pubdate_text = entry.get('published', '')
                 except:
                     logging.info("Cannot read published")
                 try:
+                    pubdate_datetime = None
                     pubdate_datetime = parse(pubdate_text)
                 except:
                     logging.info("Cannot parse pubdate")
                 
                 
-                
                 # Fetch web page content
                 web_page_content = fetch_web_page_content(link)
+                web_page_content = convert_html_to_text(web_page_content)
+                web_page_content = re.sub(r' +', ' ', web_page_content)
+                web_page_content = re.sub(r'\r', '', web_page_content)
+                web_page_content = re.sub(r' +\n', '\n', web_page_content)
+                web_page_content = re.sub(r'\n+', '\n', web_page_content)
+                web_page_content = re.sub(r'[\r\n]+', '\n', web_page_content)
                 
                 # Insert RSS feed information into the database
                 cursor.execute('''
@@ -147,11 +177,15 @@ def process_rss_feeds(json_file, database_name):
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 ''', (title, description, link, guid, pubdate_text, pubdate_datetime, rss_feed_id))
                 
+                logging.info("Converting HTML to text")
+                page_text = convert_html_to_text(web_page_content)
+                logging.info("Conversion done")
                 # Insert text content into the text_content table
                 cursor.execute('''
                     INSERT INTO text_content (url, content)
                     VALUES (?, ?)
-                ''', (link, convert_html_to_text(web_page_content)))
+                ''', (link, page_text))
+                conn.commit()
             else:
                 logging.info(f"Link already in DB : {link}")
     
@@ -160,19 +194,67 @@ def process_rss_feeds(json_file, database_name):
 
 # Function to fetch web page content
 def fetch_web_page_content(url):
+    global driver
     #if "abcnews" in url:
     #    input(f"abcnews URL : {url}")
+    page_source_str = ""
     response = requests.get(url)
     if response.status_code == 200:
         #logging.info(response.text)
-        return response.text
-    else:
-        #input(f"Cannot fetch URL content from : {url}")
-        return ''
+        page_source_str =  response.text
+    
+    # Use chrome browser when the page is empty
+    if page_source_str == "":
+        if driver is None:
+            chrome_options = webdriver.ChromeOptions()
+            chrome_options.add_argument("--disable-web-security")
+            chrome_options.add_argument("--disable-xss-auditor")
+            #chrome_options.add_argument("--verbose")
+            chrome_options.add_argument("--log-level=3")  # fatal
+            chrome_options.add_argument("--lang=en-GB")
+            chrome_options.add_argument('--blink-settings=imagesEnabled=false')
+            chrome_options.add_argument('--disable-browser-side-navigation')
+            # or alternatively we can set direct preference:
+            chrome_options.add_experimental_option(
+                "prefs", {"profile.managed_default_content_settings.images": 2}
+            )
+            
+            service = Service()
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            driver.set_page_load_timeout(5)
+            
+        try:
+            logging.info(f"Loading page {url}")
+            
+            driver.get(url)
+            
+            
+            logging.info(f"get url done.")
+            
+            page_source_str = driver.page_source
+            #WebDriverWait(driver, 3).until(lambda driver: driver.execute_script('return document.readyState') == 'complete')
+            
+            # Fait for the page page to be loaded
+            #WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, 'body')))
+        except:
+            var = traceback.format_exc()
+            #print(var)
+            page_source_str = driver.page_source
+        #WebDriverWait(driver, 10).until(EC.presence_of_element_located(driver.execute_script('return document.readyState') == 'complete'))
+        logging.info(f"Go to next page...")
+    
+    return page_source_str
 
 # Function to convert HTML to plain text using BeautifulSoup
 def convert_html_to_text(html_content):
     html_text = ""
+    
+    #try:
+    #    html_text = h2t.handle(html_content)
+    #    return html_text
+    #except:
+    #    pass
+    
     try:
         soup = BeautifulSoup(html_content, 'html.parser')
         html_text = soup.get_text()
@@ -191,6 +273,7 @@ def convert_html_to_text(html_content):
     return html_text
 
 if __name__ == '__main__':
+    logging.debug("Starting application")
     json_file = 'rss_feeds.json'
     database_name = 'rss_app.db'
     process_rss_feeds(json_file, database_name)
