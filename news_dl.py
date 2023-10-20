@@ -1,3 +1,4 @@
+import sys
 import json
 import sqlite3
 import feedparser
@@ -24,6 +25,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 import html2text
+
+from gnews import GNews
+from googlesearch import search
 
 h2t = html2text.HTML2Text()
 
@@ -88,10 +92,115 @@ def parse_pubdate(pubdate_text):
         return pubdate
     except ValueError:
         return None
+
+def selenium_chrome_google_click_cookies_consent_button():
+    global found_google_cookies_consent_button
+    global chrome_options
+    global driver
+    global chromedriverpath
+    
+    found_google_cookies_consent_button = False
+    
+    if driver is None:
+        chrome_options = webdriver.ChromeOptions()
+        chrome_options.add_argument("--disable-web-security")
+        chrome_options.add_argument("--disable-xss-auditor")
+        #chrome_options.add_argument("--verbose")
+        chrome_options.add_argument("--log-level=3")  # fatal
+        chrome_options.add_argument("--lang=en-GB")
+        chrome_options.add_argument('--blink-settings=imagesEnabled=false')
+        chrome_options.add_argument('--disable-browser-side-navigation')
+        chrome_options.add_argument("--webdriver-logfile=webdrive.log")
+        # or alternatively we can set direct preference:
+        chrome_options.add_experimental_option(
+            "prefs", {"profile.managed_default_content_settings.images": 2}
+        )
+        
+        service = Service(
+            service_args=["--log-level=ALL", "--append-log"],
+            log_path="LOGCHROME.txt",
+            loggingPrefs={'browser': 'ALL'})
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver.set_page_load_timeout(15)
+    
+    try:
+
+        if not found_google_cookies_consent_button:
+            print("Opening google news page...")
+            
+            driver.get("https://news.google.com")
+        
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                
+        print("Waiting for cookies consent button...")        
+        if not found_google_cookies_consent_button:
+            consent_cookies_element = "//span[contains(.,'Accept all')]"
+            try:
+                consent_cookies_button = WebDriverWait(driver, 2).until(EC.presence_of_element_located((By.XPATH, consent_cookies_element)))
+                consent_cookies_button.click()
+                news_search_input_element_xpath = ""
+                #browse_file_element = WebDriverWait(driver, 0.1).until(EC.presence_of_element_located((By.XPATH, browse_file_element_xpath)))
+                found_google_cookies_consent_button = True
+                print("Cookies consent button cliqued...")
+                
+            except:
+                pass
+        
+    except Exception:
+        input("Here")
+        print("Error waiting for cookies.")
+        var = traceback.format_exc()
+        print(var)
+        #sys.exit(0)
         
 # Function to fetch and process RSS feeds
+def process_google_news_search(json_file, database_name):
+    
+    logging.info("Processing google news")
+    
+    search_results = []
+
+    # Perform a Google News search
+    search_query = 'animal welfare'
+    search_query = f"{search_query} site:news.google.com"
+    
+    logging.info(f"Processing google news for '{search_query}'.")
+    
+    for result in search(search_query, num_results=25, lang="en", advanced=True):
+        try:
+            print(result.url)
+            
+            # Extract URL, title, and content of the article
+            url = result.url
+            
+            web_page_content = fetch_web_page_content(url)
+            title = ""
+            logging.info("Converting HTML to text")
+            title, page_text = convert_html_to_text(web_page_content)
+            logging.info("Conversion done")
+            page_text = re.sub(r' +', ' ', page_text)
+            page_text = re.sub(r'\r', '', page_text)
+            page_text = re.sub(r' +\n', '\n', page_text)
+            page_text = re.sub(r'\n+', '\n', page_text)
+            page_text = re.sub(r'[\r\n]+', '\n', page_text)
+            
+            print(f"url : {url}")
+            print(f"title : {title}")
+            print(f"content : {page_text}")
+            search_results.append({
+                "url": url,
+                "title": title,
+                "content": page_text
+            })
+        except Exception as e:
+            print(f"An error occurred: {str(e)}")
+    
+    input("Search result all scanned")
+        
+
+
+# Function to fetch and process RSS feeds
 def process_rss_feeds(json_file, database_name):
-    conn, cursor = initialize_database(database_name)
     rss_feed_id = None
     
     with open(json_file, 'r') as file:
@@ -196,14 +305,18 @@ def process_rss_feeds(json_file, database_name):
 # Function to fetch web page content
 def fetch_web_page_content(url):
     global driver
-    #if "abcnews" in url:
-    #    input(f"abcnews URL : {url}")
+    if "abcnews" in url:
+        input(f"abcnews URL : {url}")
     page_source_str = ""
     response = requests.get(url)
     if response.status_code == 200:
-        #logging.info(response.text)
+        logging.info(response.text)
         page_source_str =  response.text
+        
+    header['Last-Modified']
+    return page_source_str
     
+    page_source_str = ""
     # Use chrome browser when the page is empty
     if page_source_str == "":
         if driver is None:
@@ -232,7 +345,26 @@ def fetch_web_page_content(url):
             logging.info(f"Loading page {url}")
             
             driver.get(url)
-            
+                
+            try:
+
+                if "news.google.com" in url:
+                    
+                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                            
+                    consent_cookies_element = "//form/div/div/button/span"
+                    try:
+                        consent_cookies_button = WebDriverWait(driver, 2).until(EC.presence_of_element_located((By.XPATH, consent_cookies_element)))
+                        consent_cookies_button.click()
+                        news_search_input_element_xpath = ""
+                        #browse_file_element = WebDriverWait(driver, 0.1).until(EC.presence_of_element_located((By.XPATH, browse_file_element_xpath)))
+                        found_google_cookies_consent_button = True
+                        print("Cookies consent button cliqued...")
+                            
+                    except:
+                        pass
+            except:
+                pass
             
             logging.info(f"get url done.")
             
@@ -282,7 +414,11 @@ def convert_html_to_text(html_content):
     return title, html_text
 
 if __name__ == '__main__':
-    logging.debug("Starting application")
+    logging.info("Starting application")
     json_file = 'rss_feeds.json'
     database_name = 'rss_app.db'
-    process_rss_feeds(json_file, database_name)
+    conn, cursor = initialize_database(database_name)
+    #process_rss_feeds(json_file, database_name)
+    selenium_chrome_google_click_cookies_consent_button()
+    process_google_news_search(json_file, database_name)
+    
